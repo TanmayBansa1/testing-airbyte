@@ -1,0 +1,23 @@
+{
+  "name": "airbyte-pg-bq-orchestrator",
+  "version": "1.0.0",
+  "description": "Orchestrates Airbyte syncs from PostgreSQL to BigQuery based on updated_at and schema changes.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "lint": "eslint .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "AI Assistant",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.9.0",
+    "dotenv": "^16.5.0",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "nodemon": "^3.0.0"
+  }
+}
