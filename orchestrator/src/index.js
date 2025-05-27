@@ -39,9 +39,7 @@ const airbyteApiClient = axios.create({
     baseURL: config.airbyte.apiUrl,
     headers: {
         'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        // Authorization might be needed depending on Airbyte setup (e.g. Airbyte Cloud API Key)
-        // 'Authorization': `Bearer ${process.env.AIRBYTE_API_KEY}` 
+        'Content-Type': 'application/json', 
     }
 });
 
@@ -93,8 +91,8 @@ async function writeActiveJobs(jobs) {
 async function triggerAirbyteSync(connectionId) {
     logger.info(`Triggering Airbyte sync for connection ID: ${connectionId}`);
     try {
-        const response = await airbyteApiClient.post('/connections/sync', { connectionId });
-        const jobId = response.data?.job?.id || response.data?.jobId; // Adapt based on exact API response
+        const response = await airbyteApiClient.post('/jobs', { connectionId, jobType: 'sync' });
+        const jobId = response.data?.job?.jobId || response.data?.jobId; // Adapt based on exact API response
         if (!jobId) {
             logger.error('Airbyte sync trigger response did not include a job ID.', response.data);
             throw new Error('Airbyte sync trigger response did not include a job ID.');
@@ -111,7 +109,7 @@ async function triggerAirbyteSync(connectionId) {
 async function getAirbyteJobDetails(jobId) {
     logger.debug(`Fetching Airbyte job details for Job ID: ${jobId}`);
     try {
-        const response = await airbyteApiClient.post('/jobs/get', { id: jobId });
+        const response = await airbyteApiClient.get(`/jobs/${jobId}`);
         const job = response.data.job || response.data; 
         if (!job) {
             logger.warn(`No job details found in Airbyte response for job ID ${jobId}`, response.data);
@@ -119,10 +117,13 @@ async function getAirbyteJobDetails(jobId) {
         }
         logger.debug(`Job details for ${jobId}: Status - ${job.status}, CreatedAt - ${job.createdAt}, UpdatedAt - ${job.updatedAt}`);
         return {
-            id: job.id,
-            status: job.status?.toLowerCase(), // Ensure lowercase: succeeded, failed, running, pending, cancelled
+            // Ensure lowercase: succeeded, failed, running, pending, cancelled
+            id: job.jobId,
+            status: job.status?.toLowerCase(), 
             createdAt: job.createdAt ? new Date(job.createdAt * 1000) : null, 
-            updatedAt: job.updatedAt ? new Date(job.updatedAt * 1000) : null, 
+            updatedAt: job.updatedAt ? new Date(job.updatedAt * 1000) : null,
+            duration: job.duration,
+            rowsSynced: job.rowsSynced
         };
     } catch (error) {
         const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
@@ -171,24 +172,22 @@ async function processConnection(connectionConfig) {
             const jobDetails = await getAirbyteJobDetails(jobId);
             if (jobDetails) {
                 if (jobDetails.status === 'succeeded') {
-                    logger.info(`Airbyte Job ${jobDetails.id} for connection ${connectionId} succeeded.`);
+                    logger.info(`Airbyte Job ${jobDetails.jobId} for connection ${connectionId} succeeded.`);
                     lastSyncTimestamps[connectionId] = (jobDetails.updatedAt || new Date()).toISOString();
                     delete activeJobs[connectionId];
                 } else if (['failed', 'cancelled', 'not_found'].includes(jobDetails.status)) {
-                    logger.error(`Airbyte Job ${jobDetails.id} for connection ${connectionId} reported status: ${jobDetails.status}.`);
+                    logger.error(`Airbyte Job ${jobDetails.jobId} for connection ${connectionId} reported status: ${jobDetails.status}.`);
                     delete activeJobs[connectionId]; 
-                    // Optionally, add a retry mechanism or notification here
                 } else {
-                    logger.info(`Airbyte Job ${jobDetails.id} for connection ${connectionId} is still ${jobDetails.status}. Will check again next cycle.`);
+                    logger.info(`Airbyte Job ${jobDetails.jobId} for connection ${connectionId} is still ${jobDetails.status}. Will check again next cycle.`);
                     // No state change for activeJobs or lastSyncTimestamps if still running/pending
                     await writeActiveJobs(activeJobs); // Persist any changes if other connections were processed
                     await writeLastSyncTimestamps(lastSyncTimestamps);
-                    return; // Skip further processing for THIS connection in this cycle
+                    return; 
                 }
             }
         } catch (error) {
             logger.error(`Error checking Airbyte job status for ${jobId} (connection ${connectionId}):`, error);
-            // Keep job in activeJobs to retry fetching status next cycle
         }
     } 
     // If we are here, either no active job, or the active job finished (succeeded/failed/cancelled).
@@ -264,7 +263,6 @@ async function runOrchestration() {
             await processConnection(connectionConfig);
         } catch (error) {
             logger.error(`Unhandled error processing connection ${connectionConfig.connectionId}:`, error);
-            // Continue to next connection if one fails unexpectedly at this level
         }
     }
     logger.info('Orchestration cycle finished.');
@@ -287,10 +285,9 @@ if (cron.validate(config.orchestrator.cronSchedule)) {
     });
 }
 
-// --- Graceful Shutdown ---
+//  Shutdown ---
 const gracefulShutdown = async (signal) => {
     logger.info(`Received ${signal}. Shutting down gracefully...`);
-    // Stop cron jobs
     cron.getTasks().forEach(task => task.stop());
     logger.info('Cron jobs stopped.');
 

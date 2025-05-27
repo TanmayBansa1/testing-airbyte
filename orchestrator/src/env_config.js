@@ -1,8 +1,7 @@
 const dotenv = require('dotenv');
 const path = require('path');
-const fs = require('fs'); // Added fs module
+const fs = require('fs');
 
-// Load .env file from the parent 'orchestrator' directory
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 // Function to load monitored tables configuration
@@ -14,18 +13,13 @@ function loadMonitoredTablesConfig() {
             return JSON.parse(rawData);
         }
         console.warn(`Warning: monitored_tables_config.json not found at ${configPath}. Orchestrator will not monitor any tables. Please create it based on monitored_tables_config.json.example.`);
-        return []; // Return empty array if file doesn't exist
+        return [];
     } catch (error) {
         console.error(`Error loading or parsing monitored_tables_config.json from ${configPath}:`, error);
-        process.exit(1); // Exit if config is present but malformed
+        process.exit(1);
     }
 }
 
-/**
- * Configuration object for the orchestrator.
- * It's recommended to create a .env file in the 'orchestrator' directory
- * and a monitored_tables_config.json file based on the examples.
- */
 const config = {
     nodeEnv: process.env.NODE_ENV || 'development',
 
@@ -46,19 +40,16 @@ const config = {
 
     // Orchestrator settings
     orchestrator: {
-        cronSchedule: process.env.ORCHESTRATOR_CRON_SCHEDULE || '*/1 * * * *', // Changed to 1 minute for easier testing
-        // defaultUpdatedAtColumn and defaultSchemaName might still be useful for tables if not specified in JSON config
+        cronSchedule: process.env.ORCHESTRATOR_CRON_SCHEDULE || '0 * * * *',
         defaultUpdatedAtColumn: process.env.DEFAULT_UPDATED_AT_COLUMN || 'updated_at',
         defaultSchemaName: process.env.DEFAULT_SCHEMA_NAME || 'public',
-        stateDirectory: path.resolve(__dirname, '../state'), // Define state directory
+        stateDirectory: path.resolve(__dirname, '../state'),
         lastSyncTimestampsFile: path.resolve(__dirname, '../state/last_sync_timestamps.json'),
         activeJobsFile: path.resolve(__dirname, '../state/active_jobs.json'),
     },
 
-    // Logging
     logLevel: process.env.LOG_LEVEL || 'info',
 
-    // Monitored tables configuration
     monitoredConnectionsAndTables: loadMonitoredTablesConfig(),
 };
 
@@ -74,9 +65,8 @@ if (!fs.existsSync(config.orchestrator.stateDirectory)) {
 }
 
 // Basic validation for critical settings
-if (!config.sourceDb.host) { // Removed syncStateDb.host check
+if (!config.sourceDb.host) { 
     console.error('Critical source database configuration missing. Ensure SOURCE_DB_HOST is set in your .env file.');
-    // process.exit(1); // Optionally exit if critical config is missing
 }
 
 if (config.monitoredConnectionsAndTables.length === 0) {
