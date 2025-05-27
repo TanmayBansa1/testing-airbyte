@@ -1,6 +1,6 @@
 [
   {
-    "connectionId": "airbyte-connection-id-here",
+    "connectionId": "6a81ee8f-6004-483f-ae1c-534143ce64f8",
     "description": "Example Connection: Syncs user auth data",
     "monitoredTables": [
       {
@@ -15,12 +15,7 @@
       },
       {
         "schemaName": "public",
-        "tableName": "otp",
-        "updatedAtColumn": "updated_at"
-      },
-      {
-        "schemaName": "public",
-        "tableName": "sessions",
+        "tableName": "users",
         "updatedAtColumn": "updated_at"
       }
     ]

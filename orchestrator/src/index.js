@@ -6,7 +6,6 @@ const { getLastSyncTimestamps, getActiveJobs } = require("./file-handling/read_u
 const { writeLastSyncTimestamps, writeActiveJobs } = require("./file-handling/write_utils");
 const { logger } = require("./logger");
 
-
 logger.info(`Orchestrator starting with NODE_ENV: ${config.nodeEnv}`);
 logger.info(`Log level set to: ${config.logLevel}`);
 
@@ -24,20 +23,78 @@ try {
 }
 
 // --- Airbyte API Client ---
-const airbyteApiClient = axios.create({
-    baseURL: config.airbyte.apiUrl,
-    headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json', 
-    }
-});
+// const airbyteApiClient = axios.create({
+//     baseURL: config.airbyte.apiUrl,
+//     headers: {
+//         'Accept': 'application/json',
+//         'Content-Type': 'application/json', 
+//         'Authorization': `Bearer ${config.airbyte.apiKey}`
+//     }
+// });
 
+const fetchAirbyteApiKey = async () => {
+    const response = await axios.post(`${config.airbyte.apiUrl}/applications/token`, {
+        client_id: config.airbyte.clientId,
+        client_secret: config.airbyte.clientSecret
+    }, {
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+    });
+    return response.data.access_token;
+}
 
+async function createAirbyteApiClient() {
+    const airbyteApiKey = await fetchAirbyteApiKey();
+    const airbyteApiClient = axios.create({
+        baseURL: config.airbyte.apiUrl,
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${airbyteApiKey}`
+        },
+    });
+    return airbyteApiClient;
+}
+
+// Global variable to store the API client
+let airbyteApiClient = null;
 // --- Airbyte API Functions ---
+
+async function getConnectionDetails(connectionId) {
+    logger.debug(`Fetching connection details for connection ID: ${connectionId}`);
+    try {
+        // Initialize the API client if not already done
+        if (!airbyteApiClient) {
+            airbyteApiClient = await createAirbyteApiClient();
+        }
+        
+        const response = await airbyteApiClient.get(`/connections/${connectionId}`);
+        return response.data;
+    } catch (error) {
+        const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
+        logger.error(`Error fetching connection details for connection ${connectionId}: ${errorMessage}`);
+        throw error;
+    }
+}
 
 async function triggerAirbyteSync(connectionId) {
     logger.info(`Triggering Airbyte sync for connection ID: ${connectionId}`);
     try {
+        // Initialize the API client if not already done
+        if (!airbyteApiClient) {
+            airbyteApiClient = await createAirbyteApiClient();
+        }
+        
+        // First, let's check the connection details
+        const connectionDetails = await getConnectionDetails(connectionId);
+        logger.debug(`Connection status: ${connectionDetails.status}, Name: ${connectionDetails.name}`);
+        
+        if (connectionDetails.status !== 'active') {
+            throw new Error(`Connection ${connectionId} is not active (status: ${connectionDetails.status}). Cannot trigger sync.`);
+        }
+        
         const response = await airbyteApiClient.post('/jobs', { connectionId, jobType: 'sync' });
         const jobId = response.data?.job?.jobId || response.data?.jobId; // Adapt based on exact API response
         if (!jobId) {
@@ -56,6 +113,11 @@ async function triggerAirbyteSync(connectionId) {
 async function getAirbyteJobDetails(jobId) {
     logger.debug(`Fetching Airbyte job details for Job ID: ${jobId}`);
     try {
+        // Initialize the API client if not already done
+        if (!airbyteApiClient) {
+            airbyteApiClient = await createAirbyteApiClient();
+        }
+        
         const response = await airbyteApiClient.get(`/jobs/${jobId}`);
         const job = response.data.job || response.data; 
         if (!job) {
@@ -85,8 +147,8 @@ async function getAirbyteJobDetails(jobId) {
 // --- Source DB Functions ---
 
 async function getMaxUpdatedAtForTable(schema, table, updatedAtColumn) {
-    const qualifiedTableName = sourceDbPool.escapeIdentifier(schema) + '.' + sourceDbPool.escapeIdentifier(table);
-    const qualifiedUpdatedAtCol = sourceDbPool.escapeIdentifier(updatedAtColumn);
+    const qualifiedTableName = schema + '.' + table;
+    const qualifiedUpdatedAtCol = updatedAtColumn;
     const query = `SELECT MAX(${qualifiedUpdatedAtCol}) as max_updated_at FROM ${qualifiedTableName};`;
     logger.debug(`Querying max ${updatedAtColumn} from ${qualifiedTableName}`);
     try {
@@ -142,12 +204,12 @@ async function processConnection(connectionConfig) {
     if (!activeJobs[connectionId] && monitoredTables && monitoredTables.length > 0) {
         const lastSyncTimeForConnection = lastSyncTimestamps[connectionId] ? new Date(lastSyncTimestamps[connectionId]) : null;
         logger.debug(`Last sync time for connection ${connectionId}: ${lastSyncTimeForConnection ? lastSyncTimeForConnection.toISOString() : 'Never (or not recorded)'}`);
-
         let latestTimestampFound = null;
-
+        
         for (const table of monitoredTables) {
             try {
                 const maxTs = await getMaxUpdatedAtForTable(table.schemaName, table.tableName, table.updatedAtColumn);
+                console.log("maxTs is ->", maxTs);
                 if (maxTs) {
                     logger.debug(`Max ${table.updatedAtColumn} for ${table.schemaName}.${table.tableName}: ${maxTs.toISOString()}`);
                     if (!lastSyncTimeForConnection || maxTs > lastSyncTimeForConnection) {
@@ -166,7 +228,8 @@ async function processConnection(connectionConfig) {
     } else if (monitoredTables.length === 0) {
         logger.warn(`No tables configured for monitoring on connection ${connectionId}. Skipping data check.`);
     }
-
+    console.log("needsSync is ->", needsSync, "activeJobs is ->", activeJobs[connectionId]);
+    
     // 3. Trigger sync if needed and no job currently active for this connection
     if (needsSync && !activeJobs[connectionId]) {
         logger.info(`New data detected. Attempting to trigger sync for connection ${connectionId}.`);
@@ -213,7 +276,7 @@ async function runOrchestration() {
 // --- Cron Job Setup ---
 if (cron.validate(config.orchestrator.cronSchedule)) {
     logger.info(`Scheduling cron job with schedule: ${config.orchestrator.cronSchedule}`);
-    cron.schedule(config.orchestrator.cronSchedule, () => {
+    const cront_task = cron.schedule(config.orchestrator.cronSchedule, () => {
         logger.info('Cron job triggered by schedule.');
         runOrchestration().catch(err => {
             logger.error('Unhandled error during scheduled orchestration run:', err);
@@ -230,7 +293,7 @@ if (cron.validate(config.orchestrator.cronSchedule)) {
 //  Shutdown ---
 const gracefulShutdown = async (signal) => {
     logger.info(`Received ${signal}. Shutting down gracefully...`);
-    cron.getTasks().forEach(task => task.stop());
+    cront_task.stop();
     logger.info('Cron jobs stopped.');
 
     try {
@@ -249,3 +312,7 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 logger.info('Orchestrator setup complete.'); 
+
+runOrchestration().catch(err => {
+    logger.error('Unhandled error during initial orchestration run:', err);
+});

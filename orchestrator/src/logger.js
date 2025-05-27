@@ -1,4 +1,6 @@
-export const logger = {
+const config = require("./env_config");
+
+const logger = {
   info: (message) =>
     console.log(`[INFO] ${new Date().toISOString()} ${message}`),
   warn: (message) =>
@@ -14,3 +16,6 @@ export const logger = {
     }
   },
 };
+
+
+module.exports = { logger };

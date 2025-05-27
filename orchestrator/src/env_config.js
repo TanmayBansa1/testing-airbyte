@@ -2,7 +2,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
 
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 // Function to load monitored tables configuration
 function loadMonitoredTablesConfig() {
@@ -30,12 +30,16 @@ const config = {
         user: process.env.SOURCE_DB_USER,
         password: process.env.SOURCE_DB_PASSWORD,
         database: process.env.SOURCE_DB_NAME,
+        ssl: {
+            rejectUnauthorized: false,
+        }
     },
 
     // Airbyte API Configuration
     airbyte: {
         apiUrl: process.env.AIRBYTE_API_URL || 'http://localhost:8000/api/v1',
-
+        clientId: process.env.AIRBYTE_CLIENT_ID,
+        clientSecret: process.env.AIRBYTE_CLIENT_SECRET,
     },
 
     // Orchestrator settings

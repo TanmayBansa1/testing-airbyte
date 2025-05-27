@@ -1,7 +1,7 @@
 const fs = require("fs").promises;
 const { logger } = require("../logger");
 const config = require("../env_config");
-export async function readStateFile(filePath) {
+async function readStateFile(filePath) {
   try {
     await fs.access(filePath); // Check if file exists
     const data = await fs.readFile(filePath, "utf-8");
@@ -17,9 +17,11 @@ export async function readStateFile(filePath) {
     throw error;
   }
 }
-export async function getLastSyncTimestamps() {
+async function getLastSyncTimestamps() {
   return readStateFile(config.orchestrator.lastSyncTimestampsFile);
 }
-export async function getActiveJobs() {
+async function getActiveJobs() {
   return readStateFile(config.orchestrator.activeJobsFile);
 }
+
+module.exports = { getLastSyncTimestamps, getActiveJobs };
