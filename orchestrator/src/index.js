@@ -115,7 +115,6 @@ async function getAirbyteJobDetails(jobId) {
         }
         logger.debug(`Job details for ${jobId}: Status - ${job.status}, CreatedAt - ${job.createdAt}, UpdatedAt - ${job.updatedAt}`);
         return {
-            // Ensure lowercase: succeeded, failed, running, pending, cancelled
             id: job.jobId,
             status: job.status?.toLowerCase(), 
             createdAt: job.createdAt ? new Date(job.createdAt * 1000) : null, 
@@ -146,7 +145,7 @@ async function getMaxUpdatedAtForTable(schema, table, updatedAtColumn) {
         if (result.rows.length > 0 && result.rows[0].max_updated_at) {
             return new Date(result.rows[0].max_updated_at);
         }
-        return null; // No records or null max_updated_at
+        return null;
     } catch (dbError) {
         logger.error(`Error fetching max ${updatedAtColumn} for ${qualifiedTableName}:`, dbError);
         throw dbError;
