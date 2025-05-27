@@ -1,11 +1,10 @@
 const cron = require('node-cron');
 const axios = require('axios');
 const { Pool } = require('pg');
-const fs = require('fs').promises; // Using promises version of fs
+const fs = require('fs').promises;
 const path = require('path');
 const config = require('./env_config');
 
-// Basic Logger (Consider replacing with Winston or similar for production)
 const logger = {
     info: (message) => console.log(`[INFO] ${new Date().toISOString()} ${message}`),
     warn: (message) => console.warn(`[WARN] ${new Date().toISOString()} ${message}`),
@@ -26,7 +25,6 @@ try {
     sourceDbPool = new Pool(config.sourceDb);
     sourceDbPool.on('error', (err) => {
         logger.error('Source DB Pool Error:', err);
-        // Consider a more robust error handling/restart strategy for production
     });
     logger.info('Source DB pool created.');
 } catch (error) {
@@ -51,12 +49,12 @@ async function readStateFile(filePath) {
         const data = await fs.readFile(filePath, 'utf-8');
         return JSON.parse(data);
     } catch (error) {
-        if (error.code === 'ENOENT') { // File not found
+        if (error.code === 'ENOENT') {
             logger.debug(`State file not found: ${filePath}. Returning empty object.`);
-            return {}; // Return empty object if file doesn't exist
+            return {};
         }
         logger.error(`Error reading state file ${filePath}:`, error);
-        throw error; // Re-throw other errors
+        throw error;
     }
 }
 
@@ -181,7 +179,7 @@ async function processConnection(connectionConfig) {
                 } else {
                     logger.info(`Airbyte Job ${jobDetails.jobId} for connection ${connectionId} is still ${jobDetails.status}. Will check again next cycle.`);
                     // No state change for activeJobs or lastSyncTimestamps if still running/pending
-                    await writeActiveJobs(activeJobs); // Persist any changes if other connections were processed
+                    await writeActiveJobs(activeJobs);
                     await writeLastSyncTimestamps(lastSyncTimestamps);
                     return; 
                 }
@@ -190,8 +188,7 @@ async function processConnection(connectionConfig) {
             logger.error(`Error checking Airbyte job status for ${jobId} (connection ${connectionId}):`, error);
         }
     } 
-    // If we are here, either no active job, or the active job finished (succeeded/failed/cancelled).
-
+    
     // 2. Check for new data in monitored tables if no job is currently active for this connection
     let needsSync = false;
     if (!activeJobs[connectionId] && monitoredTables && monitoredTables.length > 0) {
@@ -212,12 +209,10 @@ async function processConnection(connectionConfig) {
                         if (!latestTimestampFound || maxTs > latestTimestampFound) {
                             latestTimestampFound = maxTs;
                         }
-                        // break; // Found new data in one table, enough to trigger sync for the connection
                     }
                 }
             } catch (tableError) {
                 logger.error(`Could not check ${table.updatedAtColumn} for ${table.schemaName}.${table.tableName} on connection ${connectionId}. Skipping this table for now.`, tableError);
-                // Decide if an error for one table should prevent sync for the whole connection or just log & continue
             }
         }
     } else if (monitoredTables.length === 0) {
@@ -233,7 +228,6 @@ async function processConnection(connectionConfig) {
             logger.info(`Sync successfully triggered for connection ${connectionId}, Airbyte Job ID: ${airbyteJob.jobId}.`);
         } catch (error) {
             logger.error(`Failed to trigger sync for connection ${connectionId}:`, error);
-            // Do not set active job if trigger failed
         }
     } else if (!needsSync && !activeJobs[connectionId]) {
         logger.info(`No new data detected for connection ${connectionId}. No sync triggered.`);
