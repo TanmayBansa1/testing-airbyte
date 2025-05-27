@@ -1,8 +1,6 @@
 const cron = require('node-cron');
 const axios = require('axios');
 const { Pool } = require('pg');
-const fs = require('fs').promises;
-const path = require("path");
 const config = require("./env_config");
 const { getLastSyncTimestamps, getActiveJobs } = require("./file-handling/read_utils");
 const { writeLastSyncTimestamps, writeActiveJobs } = require("./file-handling/write_utils");
