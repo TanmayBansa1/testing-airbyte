@@ -2,19 +2,12 @@ const cron = require('node-cron');
 const axios = require('axios');
 const { Pool } = require('pg');
 const fs = require('fs').promises;
-const path = require('path');
-const config = require('./env_config');
+const path = require("path");
+const config = require("./env_config");
+const { getLastSyncTimestamps, getActiveJobs } = require("./file-handling/read_utils");
+const { writeLastSyncTimestamps, writeActiveJobs } = require("./file-handling/write_utils");
+const { logger } = require("./logger");
 
-const logger = {
-    info: (message) => console.log(`[INFO] ${new Date().toISOString()} ${message}`),
-    warn: (message) => console.warn(`[WARN] ${new Date().toISOString()} ${message}`),
-    error: (message, error) => console.error(`[ERROR] ${new Date().toISOString()} ${message}`, error || ''),
-    debug: (message) => {
-        if (config.logLevel === 'debug') {
-            console.log(`[DEBUG] ${new Date().toISOString()} ${message}`);
-        }
-    },
-};
 
 logger.info(`Orchestrator starting with NODE_ENV: ${config.nodeEnv}`);
 logger.info(`Log level set to: ${config.logLevel}`);
@@ -41,48 +34,6 @@ const airbyteApiClient = axios.create({
     }
 });
 
-// --- File-based State Management --- 
-
-async function readStateFile(filePath) {
-    try {
-        await fs.access(filePath); // Check if file exists
-        const data = await fs.readFile(filePath, 'utf-8');
-        return JSON.parse(data);
-    } catch (error) {
-        if (error.code === 'ENOENT') {
-            logger.debug(`State file not found: ${filePath}. Returning empty object.`);
-            return {};
-        }
-        logger.error(`Error reading state file ${filePath}:`, error);
-        throw error;
-    }
-}
-
-async function writeStateFile(filePath, data) {
-    try {
-        await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
-        logger.debug(`State file updated: ${filePath}`);
-    } catch (error) {
-        logger.error(`Error writing state file ${filePath}:`, error);
-        throw error;
-    }
-}
-
-async function getLastSyncTimestamps() {
-    return readStateFile(config.orchestrator.lastSyncTimestampsFile);
-}
-
-async function writeLastSyncTimestamps(timestamps) {
-    await writeStateFile(config.orchestrator.lastSyncTimestampsFile, timestamps);
-}
-
-async function getActiveJobs() {
-    return readStateFile(config.orchestrator.activeJobsFile);
-}
-
-async function writeActiveJobs(jobs) {
-    await writeStateFile(config.orchestrator.activeJobsFile, jobs);
-}
 
 // --- Airbyte API Functions ---
 
