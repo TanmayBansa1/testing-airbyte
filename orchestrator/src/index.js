@@ -22,16 +22,6 @@ try {
     process.exit(1);
 }
 
-// --- Airbyte API Client ---
-// const airbyteApiClient = axios.create({
-//     baseURL: config.airbyte.apiUrl,
-//     headers: {
-//         'Accept': 'application/json',
-//         'Content-Type': 'application/json', 
-//         'Authorization': `Bearer ${config.airbyte.apiKey}`
-//     }
-// });
-
 const fetchAirbyteApiKey = async () => {
     const response = await axios.post(`${config.airbyte.apiUrl}/applications/token`, {
         client_id: config.airbyte.clientId,
@@ -58,7 +48,6 @@ async function createAirbyteApiClient() {
     return airbyteApiClient;
 }
 
-// Global variable to store the API client
 let airbyteApiClient = null;
 // --- Airbyte API Functions ---
 
